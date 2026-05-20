@@ -1,0 +1,9 @@
+name = "bernina-activation"
+main = "src/index.js"
+compatibility_date = "2026-05-20"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bernina-activation"
+database_id = "36040627-55d6-4828-baa8-70209b10151c"
