@@ -63,6 +63,7 @@ async function insertActivationCode(body, env) {
   const startAt = body.startAt == null && body.start_at == null
     ? null
     : parseEpochSeconds(body.startAt ?? body.start_at);
+  const maxDevices = parseMaxDevices(body.maxDevices ?? body.max_devices ?? 1);
 
   if (!expiresAt) {
     return json({ error: "expires_at_required" }, 400);
@@ -70,6 +71,10 @@ async function insertActivationCode(body, env) {
 
   if (startAt && startAt > expiresAt) {
     return json({ error: "start_after_expiry" }, 400);
+  }
+
+  if (!maxDevices) {
+    return json({ error: "max_devices_invalid" }, 400);
   }
 
   const now = nowSeconds();
@@ -80,9 +85,9 @@ async function insertActivationCode(body, env) {
 
   await env.DB.prepare(`
     INSERT INTO activation_codes (
-      id, token_hash, start_at, expires_at, notes, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?)
-  `).bind(id, tokenHash, startAt, expiresAt, notes, now).run();
+      id, token_hash, start_at, expires_at, notes, created_at, max_devices
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).bind(id, tokenHash, startAt, expiresAt, notes, now, maxDevices).run();
 
   const activationCode = `BIANCO1.${token}`;
 
@@ -92,6 +97,7 @@ async function insertActivationCode(body, env) {
     qrPayload: activationCode,
     startAt,
     expiresAt,
+    maxDevices,
     createdAt: now
   }, 201);
 }
@@ -102,7 +108,13 @@ async function listActivationCodes(request, env) {
   const rows = await env.DB.prepare(`
     SELECT id, start_at AS startAt, expires_at AS expiresAt, notes,
            created_at AS createdAt, redeemed_at AS redeemedAt,
-           redeemed_device_id AS redeemedDeviceId
+           redeemed_device_id AS redeemedDeviceId,
+           max_devices AS maxDevices,
+           (
+             SELECT COUNT(*)
+             FROM activation_code_redemptions
+             WHERE activation_code_id = activation_codes.id
+           ) AS redemptionCount
     FROM activation_codes
     ORDER BY created_at DESC
     LIMIT 50
@@ -124,7 +136,8 @@ async function redeemActivationCode(request, env) {
   const now = nowSeconds();
   const existing = await env.DB.prepare(`
     SELECT id, start_at AS startAt, expires_at AS expiresAt,
-           redeemed_at AS redeemedAt, redeemed_device_id AS redeemedDeviceId
+           redeemed_at AS redeemedAt, redeemed_device_id AS redeemedDeviceId,
+           max_devices AS maxDevices
     FROM activation_codes
     WHERE token_hash = ?
   `).bind(tokenHash).first();
@@ -137,29 +150,52 @@ async function redeemActivationCode(request, env) {
     return json({ error: "expired_code" }, 410);
   }
 
-  if (existing.redeemedAt && existing.redeemedDeviceId !== deviceId) {
-    return json({ error: "already_redeemed" }, 409);
-  }
+  const alreadyRedeemed = await env.DB.prepare(`
+    SELECT redeemed_at AS redeemedAt
+    FROM activation_code_redemptions
+    WHERE activation_code_id = ? AND device_id = ?
+  `).bind(existing.id, deviceId).first();
 
-  if (!existing.redeemedAt) {
-    const update = await env.DB.prepare(`
-      UPDATE activation_codes
-      SET redeemed_at = ?, redeemed_device_id = ?
-      WHERE token_hash = ? AND redeemed_at IS NULL
-    `).bind(now, deviceId, tokenHash).run();
+  let redeemedAt = alreadyRedeemed?.redeemedAt ?? null;
 
-    if (!didChangeRows(update)) {
+  if (!redeemedAt) {
+    const insert = await env.DB.prepare(`
+      INSERT OR IGNORE INTO activation_code_redemptions (
+        activation_code_id, device_id, redeemed_at
+      )
+      SELECT ?, ?, ?
+      WHERE (
+        SELECT COUNT(*)
+        FROM activation_code_redemptions
+        WHERE activation_code_id = ?
+      ) < ?
+    `).bind(existing.id, deviceId, now, existing.id, existing.maxDevices ?? 1).run();
+
+    if (didChangeRows(insert)) {
+      redeemedAt = now;
+
+      await env.DB.prepare(`
+        UPDATE activation_codes
+        SET redeemed_at = COALESCE(redeemed_at, ?),
+            redeemed_device_id = COALESCE(redeemed_device_id, ?)
+        WHERE id = ?
+      `).bind(now, deviceId, existing.id).run();
+    } else {
       const current = await env.DB.prepare(`
-        SELECT redeemed_device_id AS redeemedDeviceId
-        FROM activation_codes
-        WHERE token_hash = ?
-      `).bind(tokenHash).first();
+        SELECT redeemed_at AS redeemedAt
+        FROM activation_code_redemptions
+        WHERE activation_code_id = ? AND device_id = ?
+      `).bind(existing.id, deviceId).first();
 
-      if (current?.redeemedDeviceId !== deviceId) {
-        return json({ error: "already_redeemed" }, 409);
+      if (current?.redeemedAt) {
+        redeemedAt = current.redeemedAt;
+      } else {
+        return json({ error: "device_limit_reached" }, 409);
       }
     }
   }
+
+  const redemptionCount = await redemptionCountFor(existing.id, env);
 
   const licenseKey = await encryptedLicenseKey({
     deviceId,
@@ -172,7 +208,9 @@ async function redeemActivationCode(request, env) {
     deviceId,
     startAt: existing.startAt,
     expiresAt: existing.expiresAt,
-    redeemedAt: existing.redeemedAt ?? now
+    redeemedAt,
+    maxDevices: existing.maxDevices ?? 1,
+    redemptionCount
   });
 }
 
@@ -271,6 +309,26 @@ function parseEpochSeconds(value) {
   }
 
   return null;
+}
+
+function parseMaxDevices(value) {
+  const maxDevices = Number(value);
+
+  if (!Number.isInteger(maxDevices) || maxDevices < 1 || maxDevices > 100) {
+    return null;
+  }
+
+  return maxDevices;
+}
+
+async function redemptionCountFor(activationCodeId, env) {
+  const result = await env.DB.prepare(`
+    SELECT COUNT(*) AS count
+    FROM activation_code_redemptions
+    WHERE activation_code_id = ?
+  `).bind(activationCodeId).first();
+
+  return result?.count ?? 0;
 }
 
 async function readJson(request) {

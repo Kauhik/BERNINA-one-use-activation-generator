@@ -12,6 +12,7 @@ async function generateKey() {
   const startDatePicker = document.getElementById('start-date-picker');
   const expiryDatePicker = document.getElementById('date-picker');
   const passwordField = document.getElementById('password-field');
+  const deviceLimitField = document.getElementById('device-limit-field');
   const enableStartDate = document.getElementById('enable-start-date');
   const licenseKeyDisplay = document.getElementById('license-key-display');
   const licenseKeyQR = document.getElementById('license-key-qr');
@@ -23,10 +24,16 @@ async function generateKey() {
     return;
   }
 
+  const maxDevices = Number(deviceLimitField.value);
   const expiresAt = dateInputToEpochSeconds(expiryDatePicker.value);
   const startAt = enableStartDate.checked && startDatePicker.value
     ? dateInputToEpochSeconds(startDatePicker.value)
     : null;
+
+  if (!Number.isInteger(maxDevices) || maxDevices < 1 || maxDevices > 100) {
+    setStatus('Device limit must be between 1 and 100.', true);
+    return;
+  }
 
   if (!expiresAt) {
     setStatus('Choose an expiry date.', true);
@@ -40,7 +47,7 @@ async function generateKey() {
 
   generateButton.disabled = true;
   generateButton.textContent = 'Generating...';
-  licenseKeyDisplay.textContent = 'Generating one-use activation code...';
+  licenseKeyDisplay.textContent = 'Generating activation code...';
   licenseKeyQR.removeAttribute('src');
   setStatus('', false);
 
@@ -54,6 +61,7 @@ async function generateKey() {
         password,
         startAt,
         expiresAt,
+        maxDevices,
         notes: 'github-pages-password-generator'
       })
     });
@@ -72,15 +80,16 @@ async function generateKey() {
       `Created: ${formatEpoch(body.createdAt)}`,
       startAt ? `Starts: ${formatEpoch(startAt)}` : 'Starts: immediately',
       `Expires: ${formatEpoch(expiresAt)}`,
-      'Status: unused'
+      `Device limit: ${body.maxDevices || maxDevices}`,
+      `Status: 0/${body.maxDevices || maxDevices} used`
     ].join(' | ');
-    setStatus('One-use QR code generated. It will lock to the first iPad that redeems it.', false);
+    setStatus(successMessage(body.maxDevices || maxDevices), false);
   } catch (error) {
     licenseKeyDisplay.textContent = 'Unable to generate activation code';
     setStatus(error.message, true);
   } finally {
     generateButton.disabled = false;
-    generateButton.textContent = 'Generate One-Use QR Code';
+    generateButton.textContent = 'Generate Activation QR Code';
   }
 }
 
@@ -159,6 +168,14 @@ function errorMessage(error, status) {
   return error || `Request failed with HTTP ${status}`;
 }
 
+function successMessage(maxDevices) {
+  if (maxDevices === 1) {
+    return 'Activation QR code generated. It will lock to the first iPad that redeems it.';
+  }
+
+  return `Activation QR code generated. It will lock after ${maxDevices} iPads redeem it.`;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const today = new Date();
   const nextMonth = new Date(today);
@@ -173,5 +190,5 @@ document.addEventListener('DOMContentLoaded', () => {
   endDatePicker.min = todayString;
   endDatePicker.value = nextMonth.toISOString().split('T')[0];
 
-  document.getElementById('license-key-display').textContent = 'Generate a one-use activation code';
+  document.getElementById('license-key-display').textContent = 'Generate an activation code';
 });

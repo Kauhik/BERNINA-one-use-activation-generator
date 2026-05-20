@@ -35,13 +35,18 @@
                 <input id="password-field" type="password" placeholder="Password">
             </div>
 
-            <button id="generate-button" type="button" onclick="generateKey()">Generate One-Use QR Code</button>
+            <div class="input-wrapper">
+                <p class="input-label">Device Limit</p>
+                <input id="device-limit-field" type="number" min="1" max="100" step="1" value="1">
+            </div>
+
+            <button id="generate-button" type="button" onclick="generateKey()">Generate Activation QR Code</button>
             <p id="status-message" class="success-message"></p>
 
             <div id="key-display" class="v-stack padding background-gray border-radius align-left">
                 <h2 class="headline">Activation Code</h2>
                 <img id="license-key-qr" width="220" height="220" alt="">
-                <p id="license-key-display" class="license-key-text">Generate a one-use activation code</p>
+                <p id="license-key-display" class="license-key-text">Generate an activation code</p>
             </div>
 
             <div id="info">

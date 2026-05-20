@@ -1,6 +1,6 @@
 # BERNINA One-Use Activation Generator
 
-Static GitHub Pages frontend for generating one-use Bianco activation QR codes.
+Static GitHub Pages frontend for generating Bianco activation QR codes with a configurable device limit.
 
 The page sends the password and selected dates to the Cloudflare Worker:
 
@@ -8,7 +8,7 @@ The page sends the password and selected dates to the Cloudflare Worker:
 https://bernina-activation.kaushikmanian456.workers.dev
 ```
 
-Generated QR codes start with `BIANCO1.`. The iPad app redeems the code through the Worker, and the Worker locks the code to the first device ID that redeems it.
+Generated QR codes start with `BIANCO1.`. The iPad app redeems the code through the Worker, and the Worker locks the code after the configured number of unique device IDs redeem it.
 
 ## Deployment
 
