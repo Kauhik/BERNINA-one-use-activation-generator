@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="style.css">
+    <title>BERNINA One-Use Activation Generator</title>
+</head>
+
+<body>
+    <div id="app" class="v-stack full-screen padding">
+        <div class="container">
+            <h1 class="title">License Key Generator</h1>
+
+            <div class="input-wrapper">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="enable-start-date" onchange="toggleStartDate()">
+                    <p class="input-label">Enable Start Date (Access begins on this date at midnight, GMT+0)</p>
+                </div>
+                <input id="start-date-picker" type="date" onchange="handleStartDateChange()" min="" value="" disabled>
+            </div>
+
+            <div class="input-wrapper">
+                <p class="input-label">Expiry Date (Access gets revoked on this date at midnight, GMT+0)</p>
+                <input id="date-picker" type="date" onchange="handleEndDateChange()" value="">
+            </div>
+
+            <div class="input-wrapper">
+                <p class="input-label">Password</p>
+                <input id="password-field" type="password" placeholder="Password">
+            </div>
+
+            <button id="generate-button" type="button" onclick="generateKey()">Generate One-Use QR Code</button>
+            <p id="status-message" class="success-message"></p>
+
+            <div id="key-display" class="v-stack padding background-gray border-radius align-left">
+                <h2 class="headline">Activation Code</h2>
+                <img id="license-key-qr" width="220" height="220" alt="">
+                <p id="license-key-display" class="license-key-text">Generate a one-use activation code</p>
+            </div>
+
+            <div id="info">
+                <p></p>
+            </div>
+        </div>
+    </div>
+    <script src="vendor/qrcode.min.js"></script>
+    <script src="script.js"></script>
+</body>
+
+</html>
